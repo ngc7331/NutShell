@@ -889,6 +889,25 @@ class CSR(implicit val p: NutCoreConfig) extends NutCoreModule with HasCSRConst{
         printf("\n\n\n")
         }
       }
+
+      // NOTE: these are loads of debug messages, use with "-e 0" and "--force-dump-results"
+      // FIXME: how to use the defined "hasBru" in Backend.scala
+      val hasBru = true
+      val enableBPUStatistic = true
+      if (hasBru && enableBPUStatistic) {
+        // BPU statistic
+        def DebugBPUStatistic(name:String, right:UInt, wrong:UInt) = Debug(name + ": total=%d, right=%d, wrong=%d, acc=%d%%\n",
+          right + wrong, right, wrong, 100.U * right / (right+wrong))
+        Debug("========== BPU statistic begin ==========\n")
+        val BPUStatisticList = List(("B", "branch  "), ("J", "jump    "), ("I", "indirect"), ("R", "return  ")).map { case(abbr, name) =>
+          val right = readWithScala(perfCntList("Mbp" + abbr + "Right")._1)
+          val wrong = readWithScala(perfCntList("Mbp" + abbr + "Wrong")._1)
+          DebugBPUStatistic(name, right, wrong)
+          (right, wrong)
+        }
+        DebugBPUStatistic("total   ", BPUStatisticList.map(_._1).reduce(_+_), BPUStatisticList.map(_._2).reduce(_+_))
+        Debug("=========== BPU statistic end ===========\n")
+      }
     }
 
     // for differential testing
