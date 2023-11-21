@@ -56,8 +56,29 @@ trait HasNutCoreConst extends HasNutCoreParameter {
   val ICacheUserBundleWidth = VAddrBits*2 + 9
   val DCacheUserBundleWidth = 16
   val IndependentBru = if (Settings.get("EnableOutOfOrderExec")) true else false
+}
+
+trait HasBPUConst {
+  /* BTB */
+  val NRBTB = 512
+  // NOTE: for ooo core, NRWayBTB/PHT must be 4 to satisfy io.brIdx;
+  // NOTE: and for inorder core, NRWayBTB/PHT muse be 1 because multi way is not supported
+  // NOTE: so, although these are parameterized, no change can be made here
+  val NRWayBTB = if (Settings.get("EnableOutOfOrderExec")) 4 else 1 // Must be power of 2
+  val NRSetBTB = NRBTB >> log2Ceil(NRWayBTB)
+  val AddrIdxBits = log2Ceil(NRSetBTB)
+
+  /* PHT */
+  val NRPHT = 512
+  val NRWayPHT = if (Settings.get("EnableOutOfOrderExec")) 4 else 1 // Must be power of 2
+  val NRSetPHT = NRPHT >> log2Ceil(NRWayPHT)
+  val SatLength = 2
 
   val GHRLength = 16
+  val GHRFoldLength = 4
+
+  /* RAS */
+  val NRRAS = 16
 }
 
 trait HasNutCoreLog { this: RawModule =>

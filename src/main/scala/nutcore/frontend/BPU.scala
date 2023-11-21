@@ -59,7 +59,7 @@ class BPUUpdateReq extends NutCoreBundle {
 }
 
 // nextline predicter generates NPC from current NPC in 1 cycle
-class BPU_ooo extends NutCoreModule {
+class BPU_ooo extends NutCoreModule with HasBPUConst {
   val io = IO(new Bundle {
     val in = new Bundle { val pc = Flipped(Valid((UInt(VAddrBits.W)))) }
     val out = new RedirectIO
@@ -73,8 +73,7 @@ class BPU_ooo extends NutCoreModule {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val NRbtb = 512
-  val btbAddr = new TableAddr(log2Up(NRbtb >> 2))
+  val btbAddr = new TableAddr(AddrIdxBits)
   def btbEntry() = new Bundle {
     val tag = UInt(btbAddr.tagBits.W)
     val _type = UInt(2.W)
@@ -83,27 +82,27 @@ class BPU_ooo extends NutCoreModule {
     val valid = Bool()
   }
 
-  val btb = List.fill(4)(Module(new SRAMTemplate(btbEntry(), set = NRbtb >> 2, shouldReset = true, holdRead = true, singlePort = true)))
+  val btb = List.fill(NRWayBTB)(Module(new SRAMTemplate(btbEntry(), set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true)))
   // flush BTB when executing fence.i
   val flushBTB = WireInit(false.B)
   val flushTLB = WireInit(false.B)
   BoringUtils.addSink(flushBTB, "MOUFlushICache")
   BoringUtils.addSink(flushTLB, "MOUFlushTLB")
-  (0 to 3).map(i => (btb(i).reset := reset.asBool || (flushBTB || flushTLB)))
+  (0 until NRWayBTB).map(i => (btb(i).reset := reset.asBool || (flushBTB || flushTLB)))
 
   Debug(reset.asBool || (flushBTB || flushTLB), "[BPU-RESET] bpu-reset flushBTB:%d flushTLB:%d\n", flushBTB, flushTLB)
 
-  (0 to 3).map(i => (btb(i).io.r.req.valid := io.in.pc.valid))
-  (0 to 3).map(i => (btb(i).io.r.req.bits.setIdx := btbAddr.getIdx(io.in.pc.bits)))
+  (0 until NRWayBTB).map(i => (btb(i).io.r.req.valid := io.in.pc.valid))
+  (0 until NRWayBTB).map(i => (btb(i).io.r.req.bits.setIdx := btbAddr.getIdx(io.in.pc.bits)))
 
 
-  val btbRead = Wire(Vec(4, btbEntry()))
-  (0 to 3).map(i => (btbRead(i) := btb(i).io.r.resp.data(0)))
+  val btbRead = Wire(Vec(NRWayBTB, btbEntry()))
+  (0 until NRWayBTB).map(i => (btbRead(i) := btb(i).io.r.resp.data(0)))
   // since there is one cycle latency to read SyncReadMem,
   // we should latch the input pc for one cycle
   val pcLatch = RegEnable(io.in.pc.bits, io.in.pc.valid)
-  val btbHit = Wire(Vec(4, Bool()))
-  (0 to 3).map(i => btbHit(i) := btbRead(i).valid && btbRead(i).tag === btbAddr.getTag(pcLatch) && !flush && RegNext(btb(i).io.r.req.fire, init = false.B))
+  val btbHit = Wire(Vec(NRWayBTB, Bool()))
+  (0 until NRWayBTB).map(i => btbHit(i) := btbRead(i).valid && btbRead(i).tag === btbAddr.getTag(pcLatch) && !flush && RegNext(btb(i).io.r.req.fire, init = false.B))
   // btbHit will ignore pc(2,0). pc(2,0) is used to build brIdx
   val crosslineJump = btbRead(3).crosslineJump && btbHit(3) && !io.brIdx(0) && !io.brIdx(1) && !io.brIdx(2)
   io.crosslineJump := crosslineJump
@@ -111,14 +110,13 @@ class BPU_ooo extends NutCoreModule {
   // val crosslineJumpTarget = RegEnable(btbRead.target, crosslineJump)
 
   // PHT
-  val pht = List.fill(4)(Mem(NRbtb >> 2, UInt(2.W)))
-  val phtTaken = Wire(Vec(4, Bool()))
-  (0 to 3).map(i => (phtTaken(i) := RegEnable(pht(i).read(btbAddr.getIdx(io.in.pc.bits))(1), io.in.pc.valid)))
+  val pht = List.fill(NRWayPHT)(Mem(NRSetPHT, UInt(SatLength.W)))
+  val phtTaken = Wire(Vec(NRWayPHT, Bool()))
+  (0 until NRWayPHT).map(i => (phtTaken(i) := RegEnable(pht(i).read(btbAddr.getIdx(io.in.pc.bits))(SatLength - 1), io.in.pc.valid)))
 
   // RAS
-  val NRras = 16
-  val ras = Mem(NRras, UInt(VAddrBits.W))
-  val sp = Counter(NRras)
+  val ras = Mem(NRRAS, UInt(VAddrBits.W))
+  val sp = Counter(NRRAS)
   val rasTarget = RegEnable(ras.read(sp.value), io.in.pc.valid)
 
   // update
@@ -137,19 +135,19 @@ class BPU_ooo extends NutCoreModule {
   // SRAM to implement BTB, since write requests have higher priority
   // than read request. Again, since the pipeline will be flushed
   // in the next cycle, the read request will be useless.
-  (0 to 3).map(i => btb(i).io.w.req.valid := req.isMissPredict && req.valid && i.U === req.pc(2,1))
-  (0 to 3).map(i => btb(i).io.w.req.bits.setIdx := btbAddr.getIdx(req.pc))
-  (0 to 3).map(i => btb(i).io.w.req.bits.data := btbWrite)
+  (0 until NRWayBTB).map(i => btb(i).io.w.req.valid := req.isMissPredict && req.valid && i.U === req.pc(2,1))
+  (0 until NRWayBTB).map(i => btb(i).io.w.req.bits.setIdx := btbAddr.getIdx(req.pc))
+  (0 until NRWayBTB).map(i => btb(i).io.w.req.bits.data := btbWrite)
 
-  val getpht = LookupTree(req.pc(2,1), List.tabulate(4)(i => (i.U -> pht(i).read(btbAddr.getIdx(req.pc)))))
+  val getpht = LookupTree(req.pc(2,1), List.tabulate(NRWayPHT)(i => (i.U -> pht(i).read(btbAddr.getIdx(req.pc)))))
   val cnt = RegNext(getpht)
   val reqLatch = RegNext(req)
   when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
     val taken = reqLatch.actualTaken
     val newCnt = Mux(taken, cnt + 1.U, cnt - 1.U)
-    val wen = (taken && (cnt =/= "b11".U)) || (!taken && (cnt =/= "b00".U))
+    val wen = (taken && (cnt =/= ((1 << SatLength) - 1).U)) || (!taken && (cnt =/= 0.U))
     when (wen) {
-      (0 to 3).map(i => when(i.U === reqLatch.pc(2,1)){pht(i).write(btbAddr.getIdx(reqLatch.pc), newCnt)})
+      (0 until NRWayPHT).map(i => when(i.U === reqLatch.pc(2,1)){pht(i).write(btbAddr.getIdx(reqLatch.pc), newCnt)})
     }
   }
   when (req.valid) {
@@ -174,9 +172,9 @@ class BPU_ooo extends NutCoreModule {
 
   val pcLatchValid = genInstValid(pcLatch)
 
-  val target = Wire(Vec(4, UInt(VAddrBits.W)))
-  (0 to 3).map(i => target(i) := Mux(btbRead(i)._type === BTBtype.R, rasTarget, btbRead(i).target))
-  (0 to 3).map(i => io.brIdx(i) := btbHit(i) && pcLatchValid(i).asBool && Mux(btbRead(i)._type === BTBtype.B, phtTaken(i), true.B) && btbRead(i).valid)
+  val target = Wire(Vec(NRWayBTB, UInt(VAddrBits.W)))
+  (0 until NRWayBTB).map(i => target(i) := Mux(btbRead(i)._type === BTBtype.R, rasTarget, btbRead(i).target))
+  (0 until NRWayBTB).map(i => io.brIdx(i) := btbHit(i) && pcLatchValid(i).asBool && Mux(btbRead(i)._type === BTBtype.B, phtTaken(i), true.B) && btbRead(i).valid)
   io.out.target := PriorityMux(io.brIdx, target)
   io.out.valid := io.brIdx.asUInt.orR
   io.out.rtype := 0.U
@@ -191,7 +189,7 @@ class BPU_ooo extends NutCoreModule {
   // ROCKET uses a 32 bit instline, and its IDU logic is more simple than this implentation.
 }
 
-class BPU_embedded extends NutCoreModule {
+class BPU_embedded extends NutCoreModule with HasBPUConst {
   val io = IO(new Bundle {
     val in = new Bundle { val pc = Flipped(Valid((UInt(32.W)))) }
     val out = new RedirectIO
@@ -201,15 +199,14 @@ class BPU_embedded extends NutCoreModule {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val NRbtb = 512
-  val btbAddr = new TableAddr(log2Up(NRbtb))
+  val btbAddr = new TableAddr(AddrIdxBits)
   def btbEntry() = new Bundle {
     val tag = UInt(btbAddr.tagBits.W)
     val _type = UInt(2.W)
     val target = UInt(32.W)
   }
 
-  val btb = Module(new SRAMTemplate(btbEntry(), set = NRbtb, shouldReset = true, holdRead = true, singlePort = true))
+  val btb = Module(new SRAMTemplate(btbEntry(), set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true))
   btb.io.r.req.valid := io.in.pc.valid
   btb.io.r.req.bits.setIdx := btbAddr.getIdx(io.in.pc.bits)
 
@@ -221,13 +218,12 @@ class BPU_embedded extends NutCoreModule {
   val btbHit = btbRead.tag === btbAddr.getTag(pcLatch) && !flush && RegNext(btb.io.r.req.ready, init = false.B)
 
   // PHT
-  val pht = Mem(NRbtb, UInt(2.W))
-  val phtTaken = RegEnable(pht.read(btbAddr.getIdx(io.in.pc.bits))(1), io.in.pc.valid)
+  val pht = Mem(NRSetPHT, UInt(SatLength.W))
+  val phtTaken = RegEnable(pht.read(btbAddr.getIdx(io.in.pc.bits))(SatLength - 1), io.in.pc.valid)
 
   // RAS
-  val NRras = 16
-  val ras = Mem(NRras, UInt(32.W))
-  val sp = Counter(NRras)
+  val ras = Mem(NRRAS, UInt(32.W))
+  val sp = Counter(NRRAS)
   val rasTarget = RegEnable(ras.read(sp.value), io.in.pc.valid)
 
   // update
@@ -253,7 +249,7 @@ class BPU_embedded extends NutCoreModule {
   when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
     val taken = reqLatch.actualTaken
     val newCnt = Mux(taken, cnt + 1.U, cnt - 1.U)
-    val wen = (taken && (cnt =/= "b11".U)) || (!taken && (cnt =/= "b00".U))
+    val wen = (taken && (cnt =/= ((1 << SatLength) - 1).U)) || (!taken && (cnt =/= 0.U))
     when (wen) {
       pht.write(btbAddr.getIdx(reqLatch.pc), newCnt)
     }
@@ -278,7 +274,7 @@ class BPU_embedded extends NutCoreModule {
   io.out.rtype := 0.U
 }
 
-class BPU_inorder extends NutCoreModule {
+class BPU_inorder extends NutCoreModule with HasBPUConst {
   val io = IO(new Bundle {
     val in = new Bundle { val pc = Flipped(Valid((UInt(VAddrBits.W)))) }
     val out = new RedirectIO
@@ -290,8 +286,7 @@ class BPU_inorder extends NutCoreModule {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val NRbtb = 512
-  val btbAddr = new TableAddr(log2Up(NRbtb))
+  val btbAddr = new TableAddr(AddrIdxBits)
   def btbEntry() = new Bundle {
     val tag = UInt(btbAddr.tagBits.W)
     val _type = UInt(2.W)
@@ -300,7 +295,7 @@ class BPU_inorder extends NutCoreModule {
     val valid = Bool()
   }
 
-  val btb = Module(new SRAMTemplate(btbEntry(), set = NRbtb, shouldReset = true, holdRead = true, singlePort = true))
+  val btb = Module(new SRAMTemplate(btbEntry(), set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true))
   // flush BTB when executing fence.i
   val flushBTB = WireInit(false.B)
   val flushTLB = WireInit(false.B)
@@ -344,19 +339,17 @@ class BPU_inorder extends NutCoreModule {
   }
 
   def getPHTIdx(pc:UInt, ghr:UInt): UInt = {
-    btbAddr.getIdx(pc) ^ (fold(ghr, GHRLength, 4) << (log2Up(NRbtb) - 4))
+    btbAddr.getIdx(pc) ^ (fold(ghr, GHRLength, GHRFoldLength) << (AddrIdxBits - GHRFoldLength))
   }
 
   // PHT
-  val pht = Mem(NRbtb, UInt(2.W))
-  val phtTaken = RegEnable(pht.read(getPHTIdx(io.in.pc.bits, ghr))(1), io.in.pc.valid)
+  val pht = Mem(NRSetPHT, UInt(SatLength.W))
+  val phtTaken = RegEnable(pht.read(getPHTIdx(io.in.pc.bits, ghr))(SatLength-1), io.in.pc.valid)
 
   // RAS
-
-  val NRras = 16
-  val ras = Mem(NRras, UInt(VAddrBits.W))
-  // val raBrIdxs = Mem(NRras, UInt(2.W))
-  val sp = Counter(NRras)
+  val ras = Mem(NRRAS, UInt(VAddrBits.W))
+  // val raBrIdxs = Mem(NRRAS, UInt(2.W))
+  val sp = Counter(NRRAS)
   val rasTarget = RegEnable(ras.read(sp.value), io.in.pc.valid)
   // val rasBrIdx = RegEnable(raBrIdxs.read(sp.value), io.in.pc.valid)
 
@@ -406,7 +399,7 @@ class BPU_inorder extends NutCoreModule {
   when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
     val taken = reqLatch.actualTaken
     val newCnt = Mux(taken, cnt + 1.U, cnt - 1.U)
-    val wen = (taken && (cnt =/= "b11".U)) || (!taken && (cnt =/= "b00".U))
+    val wen = (taken && (cnt =/= ((1 << SatLength) - 1).U)) || (!taken && (cnt =/= 0.U))
     when (wen) {
       pht.write(getPHTIdx(reqLatch.pc, reqLatch.meta.ghr), newCnt)
       //Debug(){

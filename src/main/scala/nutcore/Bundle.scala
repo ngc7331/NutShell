@@ -41,7 +41,7 @@ class DataSrcIO extends NutCoreBundle {
   val imm  = Output(UInt(XLEN.W))
 }
 
-class BPUMeta extends NutCoreBundle {
+class BPUMeta extends NutCoreBundle with HasBPUConst {
   val ghr = UInt(GHRLength.W)
 }
 
