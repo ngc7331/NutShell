@@ -41,10 +41,18 @@ class DataSrcIO extends NutCoreBundle {
   val imm  = Output(UInt(XLEN.W))
 }
 
+class BPUMeta extends NutCoreBundle {
+  val ghr = UInt(GHRLength.W)
+}
+
 class RedirectIO extends NutCoreBundle {
   val target = Output(UInt(VAddrBits.W))
   val rtype = Output(UInt(1.W)) // 1: branch mispredict: only need to flush frontend  0: others: flush the whole pipeline
   val valid = Output(Bool())
+
+  // meta is used to train BPU
+  // NOTE: this is not the best way to do it, maybe we should use a meta_sram and pass the idx of it
+  val meta = Output(new BPUMeta)
 }
 
 class MisPredictionRecIO extends NutCoreBundle {

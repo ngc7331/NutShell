@@ -56,6 +56,8 @@ trait HasNutCoreConst extends HasNutCoreParameter {
   val ICacheUserBundleWidth = VAddrBits*2 + 9
   val DCacheUserBundleWidth = 16
   val IndependentBru = if (Settings.get("EnableOutOfOrderExec")) true else false
+
+  val GHRLength = 16
 }
 
 trait HasNutCoreLog { this: RawModule =>

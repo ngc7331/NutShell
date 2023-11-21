@@ -190,4 +190,6 @@ class NaiveRVCAlignBuffer extends NutCoreModule with HasInstrType with HasExcept
   io.out.bits.exceptionVec := io.in.bits.exceptionVec
   io.out.bits.exceptionVec(instrPageFault) := io.in.bits.exceptionVec(instrPageFault) || specialIPFR && (state === s_waitnext_thenj || state === s_waitnext)
   io.out.bits.crossPageIPFFix := io.in.bits.exceptionVec(instrPageFault) && (state === s_waitnext_thenj || state === s_waitnext) && !specialIPFR
+
+  io.out.bits.redirect.meta := io.in.bits.redirect.meta
 }

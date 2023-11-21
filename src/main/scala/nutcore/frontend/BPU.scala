@@ -55,6 +55,7 @@ class BPUUpdateReq extends NutCoreBundle {
   val fuOpType = Output(FuOpType())
   val btbType = Output(BTBtype())
   val isRVC = Output(Bool()) // for ras, save PC+2 to stack if is RVC
+  val meta = Output(new BPUMeta)
 }
 
 // nextline predicter generates NPC from current NPC in 1 cycle
@@ -332,9 +333,23 @@ class BPU_inorder extends NutCoreModule {
   Debug(btbHit, "[BTBHT2] btbRead.brIdx %x mask %x\n", btbRead.brIdx, Cat(crosslineJump, Fill(2, io.out.valid)))
   // Debug(btbHit, "[BTBHT5] btbReqValid:%d btbReqSetIdx:%x\n",btb.io.r.req.valid, btb.io.r.req.bits.setId)
 
+  // GHR
+  val ghr = RegInit(0.U(GHRLength.W))
+  def fold(x: UInt, from: Int, to: Int): UInt = {
+    if (from <= to) {
+      x
+    } else {
+      fold(x(from-1, to), from-to, to) ^ x(to-1, 0)
+    }
+  }
+
+  def getPHTIdx(pc:UInt, ghr:UInt): UInt = {
+    btbAddr.getIdx(pc) ^ (fold(ghr, GHRLength, 4) << (log2Up(NRbtb) - 4))
+  }
+
   // PHT
   val pht = Mem(NRbtb, UInt(2.W))
-  val phtTaken = RegEnable(pht.read(btbAddr.getIdx(io.in.pc.bits))(1), io.in.pc.valid)
+  val phtTaken = RegEnable(pht.read(getPHTIdx(io.in.pc.bits, ghr))(1), io.in.pc.valid)
 
   // RAS
 
@@ -386,18 +401,19 @@ class BPU_inorder extends NutCoreModule {
   //  Debug("[BTBWrite-ALL] %d setIdx:%x req.valid:%d pc:%x target:%x bridx:%x\n", GTimer(), btbAddr.getIdx(req.pc), req.valid, req.pc, req.actualTarget, btbWrite.brIdx)
   //}
 
-  val cnt = RegNext(pht.read(btbAddr.getIdx(req.pc)))
+  val cnt = RegNext(pht.read(getPHTIdx(req.pc, req.meta.ghr)))
   val reqLatch = RegNext(req)
   when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
     val taken = reqLatch.actualTaken
     val newCnt = Mux(taken, cnt + 1.U, cnt - 1.U)
     val wen = (taken && (cnt =/= "b11".U)) || (!taken && (cnt =/= "b00".U))
     when (wen) {
-      pht.write(btbAddr.getIdx(reqLatch.pc), newCnt)
+      pht.write(getPHTIdx(reqLatch.pc, reqLatch.meta.ghr), newCnt)
       //Debug(){
         //Debug("BPUPDATE: pc %x cnt %x\n", reqLatch.pc, newCnt)
       //}
     }
+    ghr := Cat(ghr << 1, taken)
   }
   when (req.valid) {
     when (req.fuOpType === ALUOpType.call)  {
@@ -426,6 +442,9 @@ class BPU_inorder extends NutCoreModule {
   // `&& !crosslineJump` is used to make sure this logic will run correctly when imem stalls (pcUpdate === false)
   // by using `instline`, we mean a 64 bit instfetch result from imem
   // ROCKET uses a 32 bit instline, and its IDU logic is more simple than this implentation.
+
+  // latch 1 cycle to sync with `phtTaken`
+  io.out.meta.ghr := RegEnable(ghr, io.in.pc.valid)
 }
 
 class DummyPredicter extends NutCoreModule {
