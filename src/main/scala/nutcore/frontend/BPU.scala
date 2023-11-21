@@ -187,6 +187,8 @@ class BPU_ooo extends NutCoreModule with HasBPUConst {
   // `&& !crosslineJump` is used to make sure this logic will run correctly when imem stalls (pcUpdate === false)
   // by using `instline`, we mean a 64 bit instfetch result from imem
   // ROCKET uses a 32 bit instline, and its IDU logic is more simple than this implentation.
+
+  io.out.meta := DontCare
 }
 
 class BPU_embedded extends NutCoreModule with HasBPUConst {
@@ -456,6 +458,7 @@ class DummyPredicter extends NutCoreModule {
   io.out.target := DontCare // Redirect target
   io.out.rtype := DontCare // Predicter does not need to care about it
   io.brIdx := VecInit(Seq.fill(4)(false.B)) // Which inst triggers jump
+  io.out.meta := DontCare
 }
 
 //---- Legacy BPUs ----
