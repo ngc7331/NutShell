@@ -414,7 +414,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
         //Debug("BPUPDATE: pc %x cnt %x\n", reqLatch.pc, newCnt)
       //}
     }
-    ghr := Cat(ghr << 1, taken)
+    ghr := Cat(ghr, taken)
   }
   when (req.valid) {
     when (req.fuOpType === ALUOpType.call)  {
