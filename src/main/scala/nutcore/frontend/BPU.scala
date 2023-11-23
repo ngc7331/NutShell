@@ -402,6 +402,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   //  Debug("[BTBWrite-ALL] %d setIdx:%x req.valid:%d pc:%x target:%x bridx:%x\n", GTimer(), btbAddr.getIdx(req.pc), req.valid, req.pc, req.actualTarget, btbWrite.brIdx)
   //}
 
+  // pht update
   val cnt = RegNext(pht.read(getPHTIdx(req.pc, req.meta.ghr)))
   val reqLatch = RegNext(req)
   when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
@@ -414,8 +415,21 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
         //Debug("BPUPDATE: pc %x cnt %x\n", reqLatch.pc, newCnt)
       //}
     }
-    ghr := Cat(ghr, taken)
   }
+
+  // GHR update
+  // speculative update
+  when (btbHit && btbRead._type === BTBtype.B) {
+    ghr := Cat(ghr, phtTaken)
+  }
+  // recover on miss predict
+  when (req.valid && ALUOpType.isBranch(req.fuOpType) && req.isMissPredict) {
+    // NOTE: on a miss predict, redirect will be issued by wbu (1 cycle later than alu, and therefore, BPUUpdateReq)
+    //       so, when the redirected pc is sent from ifu, ghr is already updated, that's good
+    ghr := Cat(req.meta.ghr, req.actualTaken)
+  }
+
+  // RAS update
   when (req.valid) {
     when (req.fuOpType === ALUOpType.call)  {
       ras.write(sp.value + 1.U, Mux(req.isRVC, req.pc + 2.U, req.pc + 4.U))
