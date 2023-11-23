@@ -70,6 +70,8 @@ class BPU_ooo extends NutCoreModule with HasBPUConst {
     val crosslineJump = Output(Bool())
   })
 
+  PrintBPUConst()
+
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
@@ -198,6 +200,8 @@ class BPU_embedded extends NutCoreModule with HasBPUConst {
     val flush = Input(Bool())
   })
 
+  PrintBPUConst()
+
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
@@ -284,6 +288,8 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
     val brIdx = Output(UInt(3.W))
     val crosslineJump = Output(Bool())
   })
+
+  PrintBPUConst()
 
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 

@@ -79,6 +79,14 @@ trait HasBPUConst {
 
   /* RAS */
   val NRRAS = 16
+
+  def PrintBPUConst() = {
+    println("====== BPUConst ======")
+    println("BTB = " + NRWayBTB + "way * " + NRSetBTB + "set")
+    println("PHT = " + NRWayPHT + "way * " + NRSetPHT + "set * " + SatLength + "bits")
+    println("GHR = " + GHRLength + "bits (fold to " + GHRFoldLength + "bits)")
+    println("RAS = " + NRRAS + "entry")
+  }
 }
 
 trait HasNutCoreLog { this: RawModule =>
