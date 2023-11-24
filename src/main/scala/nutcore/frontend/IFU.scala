@@ -309,7 +309,7 @@ class IFU_embedded extends NutCoreModule with HasResetVector {
 class IFU_inorder extends NutCoreModule with HasResetVector {
   val io = IO(new Bundle {
 
-    val imem = new SimpleBusUC(userBits = VAddrBits*2 + 4, addrBits = VAddrBits)
+    val imem = new SimpleBusUC(userBits = VAddrBits*2 + 4 + (new BPUMeta).getWidth, addrBits = VAddrBits)
     val out = Decoupled(new CtrlFlowIO)
 
     val redirect = Flipped(new RedirectIO)
@@ -368,7 +368,7 @@ class IFU_inorder extends NutCoreModule with HasResetVector {
   io.bpFlush := false.B
 
   io.imem.req.bits.apply(addr = Cat(pc(VAddrBits-1,1),0.U(1.W)), //cache will treat it as Cat(pc(63,3),0.U(3.W))
-    size = "b11".U, cmd = SimpleBusCmd.read, wdata = 0.U, wmask = 0.U, user = Cat(brIdx(3,0), npc(VAddrBits-1, 0), pc(VAddrBits-1, 0)))
+    size = "b11".U, cmd = SimpleBusCmd.read, wdata = 0.U, wmask = 0.U, user = Cat(bp1.io.out.meta.asUInt, brIdx(3,0), npc(VAddrBits-1, 0), pc(VAddrBits-1, 0)))
   io.imem.req.valid := io.out.ready
   //TODO: add ctrlFlow.exceptionVec
   io.imem.resp.ready := io.out.ready || io.flushVec(0)
@@ -386,11 +386,10 @@ class IFU_inorder extends NutCoreModule with HasResetVector {
     io.out.bits.pc := x(VAddrBits-1,0)
     io.out.bits.pnpc := x(VAddrBits*2-1,VAddrBits)
     io.out.bits.brIdx := x(VAddrBits*2 + 3, VAddrBits*2)
+    io.out.bits.redirect.meta := x(VAddrBits*2 + 3 + io.out.bits.redirect.meta.getWidth, VAddrBits*2 + 4).asTypeOf(io.out.bits.redirect.meta.cloneType)
   }
   io.out.bits.exceptionVec(instrPageFault) := io.ipf
   io.out.valid := io.imem.resp.valid && !io.flushVec(0)
-
-  io.out.bits.redirect.meta := bp1.io.out.meta
 
   BoringUtils.addSource(BoolStopWatch(io.imem.req.valid, io.imem.resp.fire), "perfCntCondMimemStall")
   BoringUtils.addSource(WireInit(io.flushVec.orR), "perfCntCondMifuFlush")
