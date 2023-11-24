@@ -42,6 +42,7 @@ class DataSrcIO extends NutCoreBundle {
 }
 
 class BPUMeta extends NutCoreBundle with HasBPUConst {
+  val time = UInt(64.W)
   val ghr = UInt(GHRLength.W)
 }
 

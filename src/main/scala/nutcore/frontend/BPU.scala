@@ -338,6 +338,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
 
   // GHR
   val ghr = RegInit(0.U(GHRLength.W))
+  val ghrLatch = RegEnable(ghr, io.in.pc.valid)
   def fold(x: UInt, from: Int, to: Int): UInt = {
     if (from <= to) {
       x
@@ -419,6 +420,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
     val wen = (taken && (cnt =/= ((1 << SatLength) - 1).U)) || (!taken && (cnt =/= 0.U))
     when (wen) {
       pht.write(if (EnableGShare) getPHTIdx(reqLatch.pc, reqLatch.meta.ghr) else btbAddr.getIdx(reqLatch.pc), newCnt)
+//      printf("[%d] PHT update pc=%x, cnt=%x->%x\n", GTimer(), reqLatch.pc, cnt, newCnt)
       //Debug(){
         //Debug("BPUPDATE: pc %x cnt %x\n", reqLatch.pc, newCnt)
       //}
@@ -427,15 +429,17 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
 
   // GHR update
   if (EnableGShare) {
-    // speculative update
-    when (btbHit && btbRead._type === BTBtype.B) {
-      ghr := Cat(ghr, phtTaken)
-    }
     // recover on miss predict
     when (req.valid && ALUOpType.isBranch(req.fuOpType) && req.isMissPredict) {
       // NOTE: on a miss predict, redirect will be issued by wbu (1 cycle later than alu, and therefore, BPUUpdateReq)
       //       so, when the redirected pc is sent from ifu, ghr is already updated, that's good
       ghr := Cat(req.meta.ghr, req.actualTaken)
+      printf("[%d] GHR update miss pc=%x ghr=%x->%x, predicted at %d\n", GTimer(), req.pc, ghr, Cat(req.meta.ghr, req.actualTaken), req.meta.time)
+    }
+    // speculative update
+    .elsewhen (btbHit && btbRead._type === BTBtype.B) {
+      ghr := Cat(ghr, phtTaken)
+      printf("[%d] GHR update spec pc=%x ghr=%x->%x\n", GTimer(), pcLatch, ghr, Cat(ghr, phtTaken))
     }
   }
 
@@ -470,8 +474,9 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
 
   io.out.meta := DontCare
   if (EnableGShare) {
+    io.out.meta.time := GTimer()
     // latch 1 cycle to sync with `phtTaken`
-    io.out.meta.ghr := RegEnable(ghr, io.in.pc.valid)
+    io.out.meta.ghr := ghrLatch
   }
 }
 

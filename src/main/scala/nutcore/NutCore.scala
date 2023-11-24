@@ -53,7 +53,7 @@ trait HasNutCoreParameter {
 
 trait HasNutCoreConst extends HasNutCoreParameter {
   val CacheReadWidth = 8
-  val ICacheUserBundleWidth = VAddrBits*2 + 4 + 16 // FIXME: BPUMeta use ptr
+  val ICacheUserBundleWidth = VAddrBits*2 + 4 + 80 // FIXME: BPUMeta use ptr
   val DCacheUserBundleWidth = 16
   val IndependentBru = if (Settings.get("EnableOutOfOrderExec")) true else false
 }
