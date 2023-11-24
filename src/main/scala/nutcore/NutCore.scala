@@ -74,6 +74,8 @@ trait HasBPUConst {
   val NRSetPHT = NRPHT >> log2Ceil(NRWayPHT)
   val SatLength = 2
 
+  /* GHR */
+  val EnableGShare = true
   val GHRLength = 16
   val GHRFoldLength = 4
 
@@ -84,7 +86,11 @@ trait HasBPUConst {
     println("====== BPUConst ======")
     println("BTB = " + NRWayBTB + "way * " + NRSetBTB + "set")
     println("PHT = " + NRWayPHT + "way * " + NRSetPHT + "set * " + SatLength + "bits")
-    println("GHR = " + GHRLength + "bits (fold to " + GHRFoldLength + "bits)")
+    if (EnableGShare) {
+      println("GHR = " + GHRLength + "bits (fold to " + GHRFoldLength + "bits)")
+    } else {
+      println("GShare disabled")
+    }
     println("RAS = " + NRRAS + "entry")
   }
 }

@@ -352,7 +352,11 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
 
   // PHT
   val pht = Mem(NRSetPHT, UInt(SatLength.W))
-  val phtTaken = RegEnable(pht.read(getPHTIdx(io.in.pc.bits, ghr))(SatLength-1), io.in.pc.valid)
+  val phtTaken = if (EnableGShare) {
+    RegEnable(pht.read(getPHTIdx(io.in.pc.bits, ghr))(SatLength-1), io.in.pc.valid)
+  } else {
+    RegEnable(pht.read(btbAddr.getIdx(io.in.pc.bits))(SatLength-1), io.in.pc.valid)
+  }
 
   // RAS
   val ras = Mem(NRRAS, UInt(VAddrBits.W))
@@ -403,14 +407,18 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   //}
 
   // pht update
-  val cnt = RegNext(pht.read(getPHTIdx(req.pc, req.meta.ghr)))
+  val cnt = if (EnableGShare) {
+    RegNext(pht.read(getPHTIdx(req.pc, req.meta.ghr)))
+  } else {
+    RegNext(pht.read(btbAddr.getIdx(req.pc)))
+  }
   val reqLatch = RegNext(req)
   when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
     val taken = reqLatch.actualTaken
     val newCnt = Mux(taken, cnt + 1.U, cnt - 1.U)
     val wen = (taken && (cnt =/= ((1 << SatLength) - 1).U)) || (!taken && (cnt =/= 0.U))
     when (wen) {
-      pht.write(getPHTIdx(reqLatch.pc, reqLatch.meta.ghr), newCnt)
+      pht.write(if (EnableGShare) getPHTIdx(reqLatch.pc, reqLatch.meta.ghr) else btbAddr.getIdx(reqLatch.pc), newCnt)
       //Debug(){
         //Debug("BPUPDATE: pc %x cnt %x\n", reqLatch.pc, newCnt)
       //}
@@ -418,15 +426,17 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   }
 
   // GHR update
-  // speculative update
-  when (btbHit && btbRead._type === BTBtype.B) {
-    ghr := Cat(ghr, phtTaken)
-  }
-  // recover on miss predict
-  when (req.valid && ALUOpType.isBranch(req.fuOpType) && req.isMissPredict) {
-    // NOTE: on a miss predict, redirect will be issued by wbu (1 cycle later than alu, and therefore, BPUUpdateReq)
-    //       so, when the redirected pc is sent from ifu, ghr is already updated, that's good
-    ghr := Cat(req.meta.ghr, req.actualTaken)
+  if (EnableGShare) {
+    // speculative update
+    when (btbHit && btbRead._type === BTBtype.B) {
+      ghr := Cat(ghr, phtTaken)
+    }
+    // recover on miss predict
+    when (req.valid && ALUOpType.isBranch(req.fuOpType) && req.isMissPredict) {
+      // NOTE: on a miss predict, redirect will be issued by wbu (1 cycle later than alu, and therefore, BPUUpdateReq)
+      //       so, when the redirected pc is sent from ifu, ghr is already updated, that's good
+      ghr := Cat(req.meta.ghr, req.actualTaken)
+    }
   }
 
   // RAS update
@@ -458,8 +468,11 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   // by using `instline`, we mean a 64 bit instfetch result from imem
   // ROCKET uses a 32 bit instline, and its IDU logic is more simple than this implentation.
 
-  // latch 1 cycle to sync with `phtTaken`
-  io.out.meta.ghr := RegEnable(ghr, io.in.pc.valid)
+  io.out.meta := DontCare
+  if (EnableGShare) {
+    // latch 1 cycle to sync with `phtTaken`
+    io.out.meta.ghr := RegEnable(ghr, io.in.pc.valid)
+  }
 }
 
 class DummyPredicter extends NutCoreModule {
