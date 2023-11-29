@@ -66,12 +66,13 @@ trait HasBPUConst {
   // NOTE: so, although these are parameterized, no change can be made here
   val NRWayBTB = if (Settings.get("EnableOutOfOrderExec")) 4 else 1 // Must be power of 2
   val NRSetBTB = NRBTB >> log2Ceil(NRWayBTB)
-  val AddrIdxBits = log2Ceil(NRSetBTB)
+  val BTBIdxBits = log2Ceil(NRSetBTB)
 
   /* PHT */
   val NRPHT = 512
   val NRWayPHT = if (Settings.get("EnableOutOfOrderExec")) 4 else 1 // Must be power of 2
   val NRSetPHT = NRPHT >> log2Ceil(NRWayPHT)
+  val PHTIdxBits = log2Ceil(NRSetPHT)
   val SatLength = 2
 
   /* GHR */

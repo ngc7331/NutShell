@@ -75,7 +75,7 @@ class BPU_ooo extends NutCoreModule with HasBPUConst {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val btbAddr = new TableAddr(AddrIdxBits)
+  val btbAddr = new TableAddr(BTBIdxBits)
   def btbEntry() = new Bundle {
     val tag = UInt(btbAddr.tagBits.W)
     val _type = UInt(2.W)
@@ -205,7 +205,7 @@ class BPU_embedded extends NutCoreModule with HasBPUConst {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val btbAddr = new TableAddr(AddrIdxBits)
+  val btbAddr = new TableAddr(BTBIdxBits)
   def btbEntry() = new Bundle {
     val tag = UInt(btbAddr.tagBits.W)
     val _type = UInt(2.W)
@@ -294,7 +294,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val btbAddr = new TableAddr(AddrIdxBits)
+  val btbAddr = new TableAddr(BTBIdxBits)
   def btbEntry() = new Bundle {
     val tag = UInt(btbAddr.tagBits.W)
     val _type = UInt(2.W)
@@ -348,7 +348,8 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   }
 
   def getPHTIdx(pc:UInt, ghr:UInt): UInt = {
-    btbAddr.getIdx(pc) ^ (fold(ghr, GHRLength, GHRFoldLength) << (AddrIdxBits - GHRFoldLength))
+    val padLen = if (Settings.get("IsRV32") || !Settings.get("EnableOutOfOrderExec")) 2 else 3
+    pc(padLen + PHTIdxBits - 1, padLen) ^ (fold(ghr, GHRLength, GHRFoldLength) << (PHTIdxBits - GHRFoldLength))
   }
 
   // PHT
