@@ -93,6 +93,16 @@ trait HasBPUConst {
     }
     println("RAS = " + NRRAS + "entry")
   }
+
+  val EnableBPUDebug = false
+  def BPUDebug(cond: Bool, fmt: String, data: Bits*) = {
+    if (EnableBPUDebug) {
+      when (cond) {
+        // Debug(fmt, data:_*)
+        printf(fmt, data:_*) // use printf to override global debug "LogUtil.displayLog" setting
+      }
+    }
+  }
 }
 
 trait HasNutCoreLog { this: RawModule =>
