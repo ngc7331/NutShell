@@ -329,37 +329,6 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   Debug(btbHit, "[BTBHT2] btbRead.brIdx %x mask %x\n", btbRead.brIdx, Cat(crosslineJump, Fill(2, io.out.valid)))
   // Debug(btbHit, "[BTBHT5] btbReqValid:%d btbReqSetIdx:%x\n",btb.io.r.req.valid, btb.io.r.req.bits.setId)
 
-  // GHR
-  val ghr = RegInit(0.U(GHRLength.W))
-  val ghrLatch = RegEnable(ghr, io.in.pc.valid)
-  def fold(x: UInt, from: Int, to: Int): UInt = {
-    if (from <= to) {
-      x
-    } else {
-      fold(x(from-1, to), from-to, to) ^ x(to-1, 0)
-    }
-  }
-
-  def getPHTIdx(pc:UInt, ghr:UInt): UInt = {
-    val padLen = if (Settings.get("IsRV32") || !Settings.get("EnableOutOfOrderExec")) 2 else 3
-    pc(padLen + PHTIdxBits - 1, padLen) ^ (fold(ghr, GHRLength, GHRFoldLength) << (PHTIdxBits - GHRFoldLength))
-  }
-
-  // PHT
-  val pht = Mem(NRSetPHT, UInt(SatLength.W))
-  val phtTaken = if (EnableGShare) {
-    RegEnable(pht.read(getPHTIdx(io.in.pc.bits, ghr))(SatLength-1), io.in.pc.valid)
-  } else {
-    RegEnable(pht.read(btbAddr.getIdx(io.in.pc.bits))(SatLength-1), io.in.pc.valid)
-  }
-
-  // RAS
-  val ras = Mem(NRRAS, UInt(VAddrBits.W))
-  // val raBrIdxs = Mem(NRRAS, UInt(2.W))
-  val sp = Counter(NRRAS)
-  val rasTarget = RegEnable(ras.read(sp.value), io.in.pc.valid)
-  // val rasBrIdx = RegEnable(raBrIdxs.read(sp.value), io.in.pc.valid)
-
   // update
   val req = WireInit(0.U.asTypeOf(new BPUUpdateReq))
   val btbWrite = WireInit(0.U.asTypeOf(new BTBEntry))
@@ -367,14 +336,14 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
 
   Debug(req.valid, "[BTBUP] pc=%x tag=%x index=%x bridx=%x tgt=%x type=%x\n", req.pc, btbAddr.getTag(req.pc), btbAddr.getIdx(req.pc), Cat(req.pc(1), ~req.pc(1)), req.actualTarget, req.btbType)
 
-    //val fflag = req.btbType===3.U && btb.io.w.req.valid && btb.io.w.req.bits.setIdx==="hc9".U
-    //when(fflag && GTimer()>2888000.U) {
-    //  Debug("%d\n", GTimer())
-    //  Debug("[BTBHT6] btbWrite.type is BTBtype.R/RET!!! Inpc:%x btbWrite.brIdx:%x setIdx:%x\n", io.in.pc.bits, btbWrite.brIdx, btb.io.w.req.bits.setIdx)
-    //  Debug("[BTBHT6] tag:%x target:%x _type:%x bridx:%x\n", btbWrite.tag,btbWrite.target,btbWrite._type,btbWrite.brIdx)
-    //  Debug(p"[BTBHT6] req:${req} \n")
-    //}
-    //Debug("[BTBHT5] tag: target:%x type:%d brIdx:%d\n", req.actualTarget, req.btbType, Cat(req.pc(2,0)==="h6".U && !req.isRVC, req.pc(1), ~req.pc(1)))
+  //val fflag = req.btbType===3.U && btb.io.w.req.valid && btb.io.w.req.bits.setIdx==="hc9".U
+  //when(fflag && GTimer()>2888000.U) {
+  //  Debug("%d\n", GTimer())
+  //  Debug("[BTBHT6] btbWrite.type is BTBtype.R/RET!!! Inpc:%x btbWrite.brIdx:%x setIdx:%x\n", io.in.pc.bits, btbWrite.brIdx, btb.io.w.req.bits.setIdx)
+  //  Debug("[BTBHT6] tag:%x target:%x _type:%x bridx:%x\n", btbWrite.tag,btbWrite.target,btbWrite._type,btbWrite.brIdx)
+  //  Debug(p"[BTBHT6] req:${req} \n")
+  //}
+  //Debug("[BTBHT5] tag: target:%x type:%d brIdx:%d\n", req.actualTarget, req.btbType, Cat(req.pc(2,0)==="h6".U && !req.isRVC, req.pc(1), ~req.pc(1)))
 
   btbWrite.tag := btbAddr.getTag(req.pc)
   btbWrite.target := req.actualTarget
@@ -392,71 +361,41 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   btb.io.w.req.bits.data := btbWrite
 
   //Debug(true) {
-    //when (btb.io.w.req.valid && btbWrite.tag === btbAddr.getTag("hffffffff803541a4".U)) {
-    //  Debug("[BTBWrite] %d setIdx:%x req.valid:%d pc:%x target:%x bridx:%x\n", GTimer(), btbAddr.getIdx(req.pc), req.valid, req.pc, req.actualTarget, btbWrite.brIdx)
-    //}
+  //when (btb.io.w.req.valid && btbWrite.tag === btbAddr.getTag("hffffffff803541a4".U)) {
+  //  Debug("[BTBWrite] %d setIdx:%x req.valid:%d pc:%x target:%x bridx:%x\n", GTimer(), btbAddr.getIdx(req.pc), req.valid, req.pc, req.actualTarget, btbWrite.brIdx)
+  //}
   //}
 
   //when (GTimer() > 77437484.U && btb.io.w.req.valid) {
   //  Debug("[BTBWrite-ALL] %d setIdx:%x req.valid:%d pc:%x target:%x bridx:%x\n", GTimer(), btbAddr.getIdx(req.pc), req.valid, req.pc, req.actualTarget, btbWrite.brIdx)
   //}
 
-  // pht update
-  val cnt = if (EnableGShare) {
-    RegNext(pht.read(getPHTIdx(req.pc, req.meta.ghr)))
-  } else {
-    RegNext(pht.read(btbAddr.getIdx(req.pc)))
-  }
-  val reqLatch = RegNext(req)
-  when (reqLatch.valid && ALUOpType.isBranch(reqLatch.fuOpType)) {
-    val taken = reqLatch.actualTaken
-    val newCnt = Mux(taken, cnt + 1.U, cnt - 1.U)
-    val wen = (taken && (cnt =/= ((1 << SatLength) - 1).U)) || (!taken && (cnt =/= 0.U))
-    when (wen) {
-      pht.write(if (EnableGShare) getPHTIdx(reqLatch.pc, reqLatch.meta.ghr) else btbAddr.getIdx(reqLatch.pc), newCnt)
-      BPUDebug(true.B, "[%d] PHT update pc=%x, cnt=%x->%x\n", GTimer(), reqLatch.pc, cnt, newCnt)
-      //Debug(){
-        //Debug("BPUPDATE: pc %x cnt %x\n", reqLatch.pc, newCnt)
-      //}
+  // predictors
+  println("====== predictors ======")
+  val predictors = Seq(
+    Module(if (EnableGShare) new GSharePredictor else new PHTPredictor),
+    Module(new RASPredictor)
+  )
+  predictors.zipWithIndex.map({ case (p, i) =>
+    println(i + " " + p.getClass.getName)
+    p.io.pc := io.in.pc
+    p.io.btb.entry := btbRead
+    p.io.btb.hit := btbHit
+    if (i == 0) {
+      p.io.in := DontCare
+      p.io.in.valid := true.B // default to taken (for BTBtype.J & BTBtype.I), might be override by predictors
+      p.io.in.target := btbRead.target
+    } else {
+      p.io.in := predictors(i-1).io.out
     }
-  }
+    p.io.update := req
+  })
 
-  // GHR update
-  if (EnableGShare) {
-    // recover on miss predict
-    when (req.valid && ALUOpType.isBranch(req.fuOpType) && req.isMissPredict) {
-      // NOTE: on a miss predict, redirect will be issued by wbu (1 cycle later than alu, and therefore, BPUUpdateReq)
-      //       so, when the redirected pc is sent from ifu, ghr is already updated, that's good
-      ghr := Cat(req.meta.ghr, req.actualTaken)
-      BPUDebug(true.B, "[%d] GHR update miss pc=%x ghr=%x->%x, predicted at %d\n", GTimer(), req.pc, ghr, Cat(req.meta.ghr, req.actualTaken), req.meta.time)
-    }
-    // speculative update
-    .elsewhen (btbHit && btbRead._type === BTBtype.B) {
-      ghr := Cat(ghr, phtTaken)
-      BPUDebug(true.B, "[%d] GHR update spec pc=%x ghr=%x->%x\n", GTimer(), pcLatch, ghr, Cat(ghr, phtTaken))
-    }
-  }
-
-  // RAS update
-  when (req.valid) {
-    when (req.fuOpType === ALUOpType.call)  {
-      ras.write(sp.value + 1.U, Mux(req.isRVC, req.pc + 2.U, req.pc + 4.U))
-      // raBrIdxs.write(sp.value + 1.U, Mux(req.pc(1), 2.U, 1.U))
-      sp.value := sp.value + 1.U
-    }
-    .elsewhen (req.fuOpType === ALUOpType.ret) {
-      when(sp.value === 0.U) {
-        //Debug("ATTTTT: sp.value is 0.U\n") //TODO: sp.value may equal to 0.U
-      }
-      sp.value := Mux(sp.value===0.U, 0.U, sp.value - 1.U) //TODO: sp.value may less than 0.U
-    }
-  }
-
-  io.out.target := Mux(btbRead._type === BTBtype.R, rasTarget, btbRead.target)
+  io.out.target := predictors.last.io.out.target
   // io.out.target := Mux(crosslineJumpLatch && !flush, crosslineJumpTarget, Mux(btbRead._type === BTBtype.R, rasTarget, btbRead.target))
   // io.out.brIdx  := btbRead.brIdx & Fill(3, io.out.valid)
   io.brIdx  := btbRead.brIdx & Cat(true.B, crosslineJump, Fill(2, io.out.valid))
-  io.out.valid := btbHit && Mux(btbRead._type === BTBtype.B, phtTaken, true.B && rasTarget=/=0.U) //TODO: add rasTarget=/=0.U, need fix
+  io.out.valid := btbHit && predictors.last.io.out.valid
   io.out.rtype := 0.U
   // io.out.valid := btbHit && Mux(btbRead._type === BTBtype.B, phtTaken, true.B) && !crosslineJump || crosslineJumpLatch && !flush && !crosslineJump
   // Note:
@@ -466,12 +405,8 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   // by using `instline`, we mean a 64 bit instfetch result from imem
   // ROCKET uses a 32 bit instline, and its IDU logic is more simple than this implentation.
 
-  io.out.meta := DontCare
-  if (EnableGShare) {
-    io.out.meta.time := GTimer()
-    // latch 1 cycle to sync with `phtTaken`
-    io.out.meta.ghr := ghrLatch
-  }
+  io.out.meta := predictors.last.io.out.meta
+  io.out.meta.time := GTimer()
 }
 
 class DummyPredicter extends NutCoreModule {
