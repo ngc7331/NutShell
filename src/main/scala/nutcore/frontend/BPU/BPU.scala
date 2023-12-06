@@ -23,18 +23,27 @@ import chisel3.util.experimental.BoringUtils
 import utils._
 import top.Settings
 
-class TableAddr(val idxBits: Int) extends NutCoreBundle {
+class BTBAddr extends NutCoreBundle with HasBPUConst {
   val padLen = if (Settings.get("IsRV32") || !Settings.get("EnableOutOfOrderExec")) 2 else 3
-  def tagBits = VAddrBits - padLen - idxBits
+  def tagBits = VAddrBits - padLen - BTBIdxBits
 
   //val res = UInt((AddrBits - VAddrBits).W)
   val tag = UInt(tagBits.W)
-  val idx = UInt(idxBits.W)
+  val idx = UInt(BTBIdxBits.W)
   val pad = UInt(padLen.W)
 
   def fromUInt(x: UInt) = x.asTypeOf(UInt(VAddrBits.W)).asTypeOf(this)
   def getTag(x: UInt) = fromUInt(x).tag
   def getIdx(x: UInt) = fromUInt(x).idx
+}
+
+class BTBEntry extends NutCoreBundle with HasBPUConst {
+  val tag = UInt((new BTBAddr).tagBits.W)
+  val _type = UInt(2.W)
+  val target = UInt(VAddrBits.W)
+  val crosslineJump = Bool() // NOTE: NOT used in inorder/embedded core, should be optimized by compiler
+  val brIdx = UInt(3.W)      // NOTE: NOT used in ooo/embedded core, should be optimized by compiler
+  val valid = Bool()         // NOTE: NOT used in embedded core, should be optimized by compiler
 }
 
 object BTBtype {
@@ -75,16 +84,9 @@ class BPU_ooo extends NutCoreModule with HasBPUConst {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val btbAddr = new TableAddr(BTBIdxBits)
-  def btbEntry() = new Bundle {
-    val tag = UInt(btbAddr.tagBits.W)
-    val _type = UInt(2.W)
-    val target = UInt(VAddrBits.W)
-    val crosslineJump = Bool()
-    val valid = Bool()
-  }
+  val btbAddr = new BTBAddr
 
-  val btb = List.fill(NRWayBTB)(Module(new SRAMTemplate(btbEntry(), set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true)))
+  val btb = List.fill(NRWayBTB)(Module(new SRAMTemplate(new BTBEntry, set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true)))
   // flush BTB when executing fence.i
   val flushBTB = WireInit(false.B)
   val flushTLB = WireInit(false.B)
@@ -98,7 +100,7 @@ class BPU_ooo extends NutCoreModule with HasBPUConst {
   (0 until NRWayBTB).map(i => (btb(i).io.r.req.bits.setIdx := btbAddr.getIdx(io.in.pc.bits)))
 
 
-  val btbRead = Wire(Vec(NRWayBTB, btbEntry()))
+  val btbRead = Wire(Vec(NRWayBTB, new BTBEntry))
   (0 until NRWayBTB).map(i => (btbRead(i) := btb(i).io.r.resp.data(0)))
   // since there is one cycle latency to read SyncReadMem,
   // we should latch the input pc for one cycle
@@ -123,7 +125,7 @@ class BPU_ooo extends NutCoreModule with HasBPUConst {
 
   // update
   val req = WireInit(0.U.asTypeOf(new BPUUpdateReq))
-  val btbWrite = WireInit(0.U.asTypeOf(btbEntry()))
+  val btbWrite = WireInit(0.U.asTypeOf(new BTBEntry))
   BoringUtils.addSink(req, "bpuUpdateReq")
 
   btbWrite.tag := btbAddr.getTag(req.pc)
@@ -205,18 +207,13 @@ class BPU_embedded extends NutCoreModule with HasBPUConst {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val btbAddr = new TableAddr(BTBIdxBits)
-  def btbEntry() = new Bundle {
-    val tag = UInt(btbAddr.tagBits.W)
-    val _type = UInt(2.W)
-    val target = UInt(32.W)
-  }
+  val btbAddr = new BTBAddr
 
-  val btb = Module(new SRAMTemplate(btbEntry(), set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true))
+  val btb = Module(new SRAMTemplate(new BTBEntry, set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true))
   btb.io.r.req.valid := io.in.pc.valid
   btb.io.r.req.bits.setIdx := btbAddr.getIdx(io.in.pc.bits)
 
-  val btbRead = Wire(btbEntry())
+  val btbRead = Wire(new BTBEntry)
   btbRead := btb.io.r.resp.data(0)
   // since there is one cycle latency to read SyncReadMem,
   // we should latch the input pc for one cycle
@@ -234,7 +231,7 @@ class BPU_embedded extends NutCoreModule with HasBPUConst {
 
   // update
   val req = WireInit(0.U.asTypeOf(new BPUUpdateReq))
-  val btbWrite = WireInit(0.U.asTypeOf(btbEntry()))
+  val btbWrite = WireInit(0.U.asTypeOf(new BTBEntry))
   BoringUtils.addSink(req, "bpuUpdateReq")
 
   btbWrite.tag := btbAddr.getTag(req.pc)
@@ -294,16 +291,9 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   val flush = BoolStopWatch(io.flush, io.in.pc.valid, startHighPriority = true)
 
   // BTB
-  val btbAddr = new TableAddr(BTBIdxBits)
-  def btbEntry() = new Bundle {
-    val tag = UInt(btbAddr.tagBits.W)
-    val _type = UInt(2.W)
-    val target = UInt(VAddrBits.W)
-    val brIdx = UInt(3.W)
-    val valid = Bool()
-  }
+  val btbAddr = new BTBAddr
 
-  val btb = Module(new SRAMTemplate(btbEntry(), set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true))
+  val btb = Module(new SRAMTemplate(new BTBEntry, set = NRSetBTB, shouldReset = true, holdRead = true, singlePort = true))
   // flush BTB when executing fence.i
   val flushBTB = WireInit(false.B)
   val flushTLB = WireInit(false.B)
@@ -316,7 +306,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   btb.io.r.req.bits.setIdx := btbAddr.getIdx(io.in.pc.bits)
 
 
-  val btbRead = Wire(btbEntry())
+  val btbRead = Wire(new BTBEntry)
   btbRead := btb.io.r.resp.data(0)
   // since there is one cycle latency to read SyncReadMem,
   // we should latch the input pc for one cycle
@@ -372,7 +362,7 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
 
   // update
   val req = WireInit(0.U.asTypeOf(new BPUUpdateReq))
-  val btbWrite = WireInit(0.U.asTypeOf(btbEntry()))
+  val btbWrite = WireInit(0.U.asTypeOf(new BTBEntry))
   BoringUtils.addSink(req, "bpuUpdateReq")
 
   Debug(req.valid, "[BTBUP] pc=%x tag=%x index=%x bridx=%x tgt=%x type=%x\n", req.pc, btbAddr.getTag(req.pc), btbAddr.getIdx(req.pc), Cat(req.pc(1), ~req.pc(1)), req.actualTarget, req.btbType)
