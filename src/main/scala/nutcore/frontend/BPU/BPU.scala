@@ -373,8 +373,8 @@ class BPU_inorder extends NutCoreModule with HasBPUConst {
   // predictors
   println("====== predictors ======")
   val predictors = Seq(
-    Module(new BBDummyPredictor), // TEST ONLY
-    Module(if (EnableGShare) new GSharePredictor else new PHTPredictor),
+    Module(new BBGSharePredictor),
+    // Module(if (EnableGShare) new GSharePredictor else new PHTPredictor),
     Module(new RASPredictor)
   )
   predictors.zipWithIndex.map({ case (p, i) =>
