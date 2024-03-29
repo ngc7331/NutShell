@@ -63,4 +63,22 @@ class GSharePredictor extends Predictor {
     BPUDebug(true.B, "[%d] GHR update spec pc=%x ghr=%x->%x\n", GTimer(), pcLatch, ghr, new_ghr)
   }
   ghr := new_ghr
+
+  // trace
+  // when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || updateLatch.valid) {
+  //   printf(
+  //     "%b,%b,%b,%b,%b,%b,%b,%b,%b,%b,%b\n",
+  //     pcLatch,                                                       // pc
+  //     phtTaken,                                                      // taken
+  //     updateLatch.pc,                                                // train_pc
+  //     updateLatch.actualTaken,                                       // train_taken
+  //     RegEnable(pht.read(getPHTIdx(io.pc.bits, ghr)), io.pc.valid),  // pht_rdata
+  //     updateLatch.actualTaken,                                       // pht_wdata
+  //     RegEnable(getPHTIdx(io.pc.bits, ghr), io.pc.valid),            // pht_raddr
+  //     getPHTIdx(updateLatch.pc, updateLatch.meta.ghr),               // pht_waddr
+  //     RegEnable(ghr, io.pc.valid),                                   // ghr_rdata
+  //     updateLatch.actualTaken,                                       // ghr_wdata
+  //     updateLatch.meta.ghr                                           // train_ghr_rdata
+  //   )
+  // }
 }
