@@ -70,6 +70,7 @@ class BBGSharePredictor extends Predictor {
   val ghr = RegInit(0.U(16.W))
 
   val imp = Module(new BBGSharePredictorImp_BSD_NutShell)
+  println("Using " + imp.getClass.getName)
   imp.io.pc := RegNext(io.pc.bits) // latch 1 cycle to sync with btbread
   imp.io.pht_rdata := RegNext(pht.read(imp.io.pht_raddr))
   imp.io.ghr_rdata := RegNext(ghr)
