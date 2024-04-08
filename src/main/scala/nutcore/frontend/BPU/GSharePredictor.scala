@@ -65,20 +65,20 @@ class GSharePredictor extends Predictor {
   ghr := new_ghr
 
   // trace
-  // when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || updateLatch.valid) {
+  // when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || io.update.valid) {
   //   printf(
   //     "%b,%b,%b,%b,%b,%b,%b,%b,%b,%b,%b\n",
-  //     pcLatch,                                                       // pc
-  //     phtTaken,                                                      // taken
-  //     updateLatch.pc,                                                // train_pc
-  //     updateLatch.actualTaken,                                       // train_taken
-  //     RegEnable(pht.read(getPHTIdx(io.pc.bits, ghr)), io.pc.valid),  // pht_rdata
-  //     updateLatch.actualTaken,                                       // pht_wdata
-  //     RegEnable(getPHTIdx(io.pc.bits, ghr), io.pc.valid),            // pht_raddr
-  //     getPHTIdx(updateLatch.pc, updateLatch.meta.ghr),               // pht_waddr
-  //     RegEnable(ghr, io.pc.valid),                                   // ghr_rdata
-  //     updateLatch.actualTaken,                                       // ghr_wdata
-  //     updateLatch.meta.ghr                                           // train_ghr_rdata
+  //     RegNext(io.pc.bits(31,0)),                                     // pc
+  //     RegNext(pht.read(getPHTIdx(io.pc.bits, ghr))(SatLength-1)),    // taken
+  //     io.update.pc(31,0),                                            // train_pc
+  //     io.update.actualTaken,                                         // train_taken
+  //     RegNext(pht.read(getPHTIdx(io.pc.bits, ghr))),                 // pht_rdata
+  //     io.update.actualTaken,                                         // pht_wdata
+  //     RegNext(getPHTIdx(io.pc.bits, ghr)),                           // pht_raddr
+  //     getPHTIdx(io.update.pc, io.update.meta.ghr),                   // pht_waddr
+  //     RegNext(ghr),                                                  // ghr_rdata
+  //     io.update.actualTaken,                                         // ghr_wdata
+  //     io.update.meta.ghr                                             // train_ghr_rdata
   //   )
   // }
 }
