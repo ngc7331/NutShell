@@ -64,12 +64,16 @@ class BBGSharePredictorImp_BSD_NutShell extends BBGSharePredictorImp_BSD {
   addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_NutShell.v")
 }
 
+class BBGSharePredictorImp_BSD_NutShell_less extends BBGSharePredictorImp_BSD {
+  addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_NutShell_less.v")
+}
+
 /* wrapper */
 class BBGSharePredictor extends Predictor {
   val pht = Mem(NRSetPHT, UInt(SatLength.W))
   val ghr = RegInit(0.U(16.W))
 
-  val imp = Module(new BBGSharePredictorImp_BSD_sim)
+  val imp = Module(new BBGSharePredictorImp_BSD_NutShell_less)
   println("Using " + imp.getClass.getName)
   imp.io.pc := RegNext(io.pc.bits) // latch 1 cycle to sync with btbread
   imp.io.pht_rdata := RegNext(pht.read(imp.io.pht_raddr))
