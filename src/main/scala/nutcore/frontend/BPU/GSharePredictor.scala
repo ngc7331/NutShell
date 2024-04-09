@@ -65,20 +65,36 @@ class GSharePredictor extends Predictor {
   ghr := new_ghr
 
   // trace
-  // when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || io.update.valid) {
-  //   printf(
-  //     "%b,%b,%b,%b,%b,%b,%b,%b,%b,%b,%b\n",
-  //     RegNext(io.pc.bits(31,0)),                                     // pc
-  //     RegNext(pht.read(getPHTIdx(io.pc.bits, ghr))(SatLength-1)),    // taken
-  //     io.update.pc(31,0),                                            // train_pc
-  //     io.update.actualTaken,                                         // train_taken
-  //     RegNext(pht.read(getPHTIdx(io.pc.bits, ghr))),                 // pht_rdata
-  //     io.update.actualTaken,                                         // pht_wdata
-  //     RegNext(getPHTIdx(io.pc.bits, ghr)),                           // pht_raddr
-  //     getPHTIdx(io.update.pc, io.update.meta.ghr),                   // pht_waddr
-  //     RegNext(ghr),                                                  // ghr_rdata
-  //     io.update.actualTaken,                                         // ghr_wdata
-  //     io.update.meta.ghr                                             // train_ghr_rdata
-  //   )
-  // }
+  /* NOTE: we can't use RegNext(pht.read(index)) inside when(RegNext(condition)) since pht is a Mem with ren port, otherwise:
+   *       in cycle 1, condition and index are valid, but RegNext(condition) is not valid, so pht.read(index) is invalid.
+   *       in cycle 2, RegNext(condition) is valid, but index is not valid, so pht.read(index) is also invalid.
+   *       as quick fix, we can use pht.read(RegNext(index)) or just use RegNext(pht.read(index)) outside when(RegNext(condition))
+   */
+  val _trace_pc              = RegNext(io.pc.bits(31,0))
+  val _trace_taken           = RegNext(pht.read(getPHTIdx(io.pc.bits, ghr))(SatLength-1))
+  val _trace_train_pc        = io.update.pc(31,0)
+  val _trace_train_taken     = io.update.actualTaken
+  val _trace_pht_rdata       = RegNext(pht.read(getPHTIdx(io.pc.bits, ghr)))
+  val _trace_pht_wdata       = io.update.actualTaken
+  val _trace_pht_raddr       = RegNext(getPHTIdx(io.pc.bits, ghr))
+  val _trace_pht_waddr       = getPHTIdx(io.update.pc, io.update.meta.ghr)
+  val _trace_ghr_rdata       = RegNext(ghr)
+  val _trace_ghr_wdata       = io.update.actualTaken
+  val _trace_train_ghr_rdata = io.update.meta.ghr
+  when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || io.update.valid) {
+    printf(
+      "%b,%b,%b,%b,%b,%b,%b,%b,%b,%b,%b\n",
+      _trace_pc,
+      _trace_taken,
+      _trace_train_pc,
+      _trace_train_taken,
+      _trace_pht_rdata,
+      _trace_pht_wdata,
+      _trace_pht_raddr,
+      _trace_pht_waddr,
+      _trace_ghr_rdata,
+      _trace_ghr_wdata,
+      _trace_train_ghr_rdata
+    )
+  }
 }
