@@ -1,4 +1,4 @@
-module BBGSharePredictorImp_BSD_sim(
+module BBGSharePredictorImp_BSD_b_sim(
     input [31:0] pc,
     input [31:0] train_pc,
     input  train_taken,

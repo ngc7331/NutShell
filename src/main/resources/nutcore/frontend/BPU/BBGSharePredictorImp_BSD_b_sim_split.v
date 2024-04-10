@@ -1,4 +1,4 @@
-module BBGSharePredictorImp_BSD_sim_split(
+module BBGSharePredictorImp_BSD_b_sim_split(
     input [31:0] pc,
     input [1:0] pht_rdata,
     input [15:0] ghr_rdata,

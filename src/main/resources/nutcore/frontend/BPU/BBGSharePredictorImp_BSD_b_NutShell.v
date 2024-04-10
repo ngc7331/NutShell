@@ -1,4 +1,4 @@
-module BBGSharePredictorImp_BSD_NutShell(
+module BBGSharePredictorImp_BSD_b_NutShell(
     input [31:0] pc,
     input [31:0] train_pc,
     input  train_taken,
