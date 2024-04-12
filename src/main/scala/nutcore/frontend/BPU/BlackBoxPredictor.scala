@@ -76,12 +76,32 @@ class BBGSharePredictorImp_BSD_b_NutShell_split extends BBGSharePredictorImp_BSD
   addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_b_NutShell_split.v")
 }
 
+class BBGSharePredictorImp_BSD_c_sim extends BBGSharePredictorImp_BSD {
+  addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_c_sim.v")
+}
+
+class BBGSharePredictorImp_BSD_c_NutShell extends BBGSharePredictorImp_BSD {
+  addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_c_NutShell.v")
+}
+
+class BBGSharePredictorImp_BSD_c_NutShell_less extends BBGSharePredictorImp_BSD {
+  addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_c_NutShell_less.v")
+}
+
+class BBGSharePredictorImp_BSD_c_sim_split extends BBGSharePredictorImp_BSD {
+  addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_c_sim_split.v")
+}
+
+class BBGSharePredictorImp_BSD_c_NutShell_split extends BBGSharePredictorImp_BSD {
+  addResource("/nutcore/frontend/BPU/BBGSharePredictorImp_BSD_c_NutShell_split.v")
+}
+
 /* wrapper */
 class BBGSharePredictor extends Predictor {
   val pht = Mem(NRSetPHT, UInt(SatLength.W))
   val ghr = RegInit(0.U(16.W))
 
-  val imp = Module(new BBGSharePredictorImp_BSD_b_NutShell_split)
+  val imp = Module(new BBGSharePredictorImp_BSD_c_sim_split)
   println("Using " + imp.getClass.getName)
   imp.io.pc := io.pc.bits
   // latch 1 cycle to sync with btbread
