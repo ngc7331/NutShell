@@ -81,20 +81,20 @@ class GSharePredictor extends Predictor {
   val _trace_ghr_rdata       = RegNext(ghr)
   val _trace_ghr_wdata       = io.update.actualTaken
   val _trace_train_ghr_rdata = io.update.meta.ghr
-  when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || io.update.valid) {
-    printf(
-      "%b,%b,%b,%b,%b,%b,%b,%b,%b,%b,%b\n",
-      _trace_pc,
-      _trace_taken,
-      _trace_train_pc,
-      _trace_train_taken,
-      _trace_pht_rdata,
-      _trace_pht_wdata,
-      _trace_pht_raddr,
-      _trace_pht_waddr,
-      _trace_ghr_rdata,
-      _trace_ghr_wdata,
-      _trace_train_ghr_rdata
-    )
-  }
+  // when ((io.btb.hit && io.btb.entry._type === BTBtype.B && RegNext(io.pc.valid)) || io.update.valid) {
+  //   printf(
+  //     "%b,%b,%b,%b,%b,%b,%b,%b,%b,%b,%b\n",
+  //     _trace_pc,
+  //     _trace_taken,
+  //     _trace_train_pc,
+  //     _trace_train_taken,
+  //     _trace_pht_rdata,
+  //     _trace_pht_wdata,
+  //     _trace_pht_raddr,
+  //     _trace_pht_waddr,
+  //     _trace_ghr_rdata,
+  //     _trace_ghr_wdata,
+  //     _trace_train_ghr_rdata
+  //   )
+  // }
 }
